@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   type Node,
   type Edge,
-  MarkerType,
-  EdgeLabelRenderer,
-  BaseEdge,
   type EdgeProps,
+  type ReactFlowInstance,
+  MarkerType,
+  BaseEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../../store';
@@ -17,74 +17,78 @@ import { ExpertNode } from './ExpertNode';
 import { LoopGroupNode } from './LoopGroupNode';
 import { ModelSelectorPopover } from './ModelSelectorPopover';
 
-// Custom edge: curves out to the right side to show the per-chapter loop
-function LoopbackEdge({ sourceX, sourceY, targetX, targetY, label, markerEnd, style }: EdgeProps) {
-  // Both nodes are vertically stacked at the same X. We manually draw a cubic
-  // bezier that exits right, loops around, and re-enters from the right.
-  const offset = 55; // how far right the curve bulges
-  const sx = sourceX + 10; // start from right side of source
-  const sy = sourceY;
-  const tx = targetX + 10; // end at right side of target
-  const ty = targetY;
-  const cx = Math.max(sx, tx) + offset;
+// ── Geometry constants ──────────────────────────────────────────────────────
+// ExpertNode: min-w-[140px] + px-3 padding → rendered width ~150px.
+// All single-column nodes sit at x = NODE_COL.
+// The loopback arc exits from NODE_RIGHT, curves to LOOP_ARC_X, and returns.
+// Both loop groups share GROUP_X and GROUP_WIDTH so their right edges align.
+const NODE_COL    = 110;   // x of node left edge
+const NODE_WIDTH  = 150;   // approximate rendered node width
+const NODE_RIGHT  = NODE_COL + NODE_WIDTH + 5;  // 265 — just past node right edge
+const LOOP_ARC_X  = 298;   // arc peak — kept inside group right edge (300)
+const GROUP_X     = 60;    // left edge of both loop group boxes
+const GROUP_WIDTH = 240;   // width of both loop group boxes (right edge = 300)
 
-  const path = `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ty}, ${tx} ${ty}`;
-  const labelX = cx + 4;
-  const labelY = (sy + ty) / 2;
-
-  return (
-    <>
-      <BaseEdge path={path} markerEnd={markerEnd} style={style} />
-      <EdgeLabelRenderer>
-        <div
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-            pointerEvents: 'none',
-          }}
-          className="text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 px-1 rounded"
-        >
-          {label as string}
-        </div>
-      </EdgeLabelRenderer>
-    </>
-  );
+// ── Loopback edge ──────────────────────────────────────────────────────────
+// A "D"-shaped cubic bezier that exits the right side of the loop group,
+// curves around, and re-enters. Uses fixed x-coords so it never overlaps nodes.
+function LoopbackEdge({ sourceY, targetY, markerEnd, style }: EdgeProps) {
+  const path =
+    `M ${NODE_RIGHT} ${sourceY} ` +
+    `C ${LOOP_ARC_X} ${sourceY}, ${LOOP_ARC_X} ${targetY}, ${NODE_RIGHT} ${targetY}`;
+  return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
 const nodeTypes = { expert: ExpertNode, loopGroup: LoopGroupNode };
 const edgeTypes = { loopback: LoopbackEdge };
 
-// Fixed layout positions for the DAG
-// Group nodes use zIndex -1 and are sized to enclose the relevant agent nodes.
+// ── Node positions ─────────────────────────────────────────────────────────
 const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
-  logline_creator:       { x: 110, y: 0 },
-  world_builder:         { x: 110, y: 90 },
-  scientific_advisor:    { x: 0,   y: 185 },
-  persona_creator:       { x: 220, y: 185 },
-  chapter_beats_creator: { x: 110, y: 280 },
-  scene_outliner:        { x: 110, y: 370 },
-  prose_writer:          { x: 110, y: 470 },
-  continuity_editor:     { x: 110, y: 560 },
-  literary_editor:       { x: 110, y: 650 },
+  logline_creator:       { x: NODE_COL, y: 0   },
+  world_builder:         { x: NODE_COL, y: 90  },
+  scientific_advisor:    { x: 0,        y: 185 },
+  persona_creator:       { x: 220,      y: 185 },
+  chapter_beats_creator: { x: NODE_COL, y: 280 },
+  scene_outliner:        { x: NODE_COL, y: 370 },
+  prose_writer:          { x: NODE_COL, y: 470 },
+  continuity_editor:     { x: NODE_COL, y: 560 },
+  literary_editor:       { x: NODE_COL, y: 650 },
 };
 
-// Group bounding boxes — positioned behind the nodes they enclose
-// Chapter loop is wider to accommodate the loopback curve on the right side
-const SCENE_LOOP_GROUP = { x: 60, y: 350, width: 250, height: 80 };
-const CHAPTER_LOOP_GROUP = { x: 60, y: 450, width: 310, height: 270 };
+// Loop group bounding boxes — both identical width, tightly wrapping their nodes
+const SCENE_GROUP   = { x: GROUP_X, y: 350, width: GROUP_WIDTH, height: 82  };
+const CHAPTER_GROUP = { x: GROUP_X, y: 450, width: GROUP_WIDTH, height: 275 };
 
+// ── Component ─────────────────────────────────────────────────────────────
 export function ExpertGraph() {
-  const phases = useStore(s => s.phases);
-  const activePhase = useStore(s => s.activePhase);
-  const darkMode = useStore(s => s.darkMode);
-  const modelConfig = useStore(s => s.modelConfig);
-  const projectId = useStore(s => s.projectId);
+  const phases         = useStore(s => s.phases);
+  const activePhase    = useStore(s => s.activePhase);
+  const darkMode       = useStore(s => s.darkMode);
+  const modelConfig    = useStore(s => s.modelConfig);
+  const projectId      = useStore(s => s.projectId);
   const chapterProgress = useStore(s => s.chapterProgress);
 
   const [popoverPhase, setPopoverPhase] = useState<string | null>(null);
-  const [popoverPos, setPopoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [popoverPos,   setPopoverPos]   = useState({ x: 0, y: 0 });
 
-  const sceneLoopActive = activePhase === 'scene_outliner';
+  // Responsive fitView: re-fit whenever the container is resized (panel drag)
+  const rfRef        = useRef<ReactFlowInstance | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        rfRef.current?.fitView({ padding: 0.2, duration: 200 });
+      }, 50);
+    });
+    ro.observe(el);
+    return () => { ro.disconnect(); clearTimeout(timer); };
+  }, []);
+
+  const sceneLoopActive   = activePhase === 'scene_outliner';
   const chapterLoopActive = ['prose_writer', 'continuity_editor', 'literary_editor'].includes(activePhase ?? '');
 
   const progressLabel = chapterProgress
@@ -112,30 +116,26 @@ export function ExpertGraph() {
       {
         id: '__scene_loop_group',
         type: 'loopGroup',
-        position: { x: SCENE_LOOP_GROUP.x, y: SCENE_LOOP_GROUP.y },
-        style: { width: SCENE_LOOP_GROUP.width, height: SCENE_LOOP_GROUP.height },
+        position: { x: SCENE_GROUP.x, y: SCENE_GROUP.y },
+        style: { width: SCENE_GROUP.width, height: SCENE_GROUP.height },
         data: {
           label: '× chapters',
           progress: sceneLoopActive ? progressLabel : undefined,
           isActive: sceneLoopActive,
         },
-        draggable: false,
-        selectable: false,
-        zIndex: 0,
+        draggable: false, selectable: false, zIndex: 0,
       },
       {
         id: '__chapter_loop_group',
         type: 'loopGroup',
-        position: { x: CHAPTER_LOOP_GROUP.x, y: CHAPTER_LOOP_GROUP.y },
-        style: { width: CHAPTER_LOOP_GROUP.width, height: CHAPTER_LOOP_GROUP.height },
+        position: { x: CHAPTER_GROUP.x, y: CHAPTER_GROUP.y },
+        style: { width: CHAPTER_GROUP.width, height: CHAPTER_GROUP.height },
         data: {
           label: '× chapters',
           progress: chapterLoopActive ? progressLabel : undefined,
           isActive: chapterLoopActive,
         },
-        draggable: false,
-        selectable: false,
-        zIndex: 0,
+        draggable: false, selectable: false, zIndex: 0,
       },
     ];
 
@@ -145,12 +145,12 @@ export function ExpertGraph() {
   const edges: Edge[] = useMemo(() => {
     const result: Edge[] = [];
 
+    // Regular DAG edges
     for (const [target, deps] of Object.entries(PHASE_DEPENDENCIES)) {
       for (const source of deps) {
         result.push({
           id: `${source}->${target}`,
-          source,
-          target,
+          source, target,
           markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
           style: { stroke: '#94a3b8', strokeWidth: 1.5 },
           animated: phases[source]?.status === 'running',
@@ -159,24 +159,35 @@ export function ExpertGraph() {
       }
     }
 
-    // Loopback edge: literary_editor → prose_writer (curved right side, shows per-chapter loop)
+    // Scene loop: self-loop on scene_outliner
+    result.push({
+      id: 'loopback-scene',
+      source: 'scene_outliner',
+      target: 'scene_outliner',
+      type: 'loopback',
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
+      style: { stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '5 3', opacity: 0.75 },
+      animated: sceneLoopActive,
+      zIndex: 2,
+    } as Edge);
+
+    // Chapter loop: literary_editor → prose_writer
     result.push({
       id: 'loopback-chapter',
       source: 'literary_editor',
       target: 'prose_writer',
       type: 'loopback',
-      label: 'next chapter',
       markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
-      style: { stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '5 3', opacity: 0.7 },
+      style: { stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '5 3', opacity: 0.75 },
       animated: chapterLoopActive,
       zIndex: 2,
     } as Edge);
 
     return result;
-  }, [phases, chapterLoopActive]);
+  }, [phases, sceneLoopActive, chapterLoopActive]);
 
   return (
-    <div className="h-full w-full relative">
+    <div ref={containerRef} className="h-full w-full relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -189,8 +200,9 @@ export function ExpertGraph() {
         zoomOnScroll={false}
         panOnScroll={false}
         className={darkMode ? 'dark' : ''}
+        onInit={instance => { rfRef.current = instance; }}
         onNodeClick={(event, node) => {
-          if (node.id.startsWith('__')) return; // ignore group nodes
+          if (node.id.startsWith('__')) return;
           setPopoverPhase(node.id);
           setPopoverPos({ x: event.clientX, y: event.clientY });
         }}
