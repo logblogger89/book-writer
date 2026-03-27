@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@variant dark (&:is(.dark, .dark *));
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Streaming cursor animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: '▊';
+  animation: blink 1s infinite;
+  color: #6366f1;
+}
+
+/* React Flow overrides */
+.react-flow__node {
+  cursor: default;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #374151;
+}
+
+/* Prose viewer */
+.prose-content {
+  line-height: 1.8;
+  font-size: 1rem;
+  color: #1e293b;
+}
+.dark .prose-content {
+  color: #e2e8f0;
+}
+.prose-content p {
+  margin-bottom: 1.25em;
+}
