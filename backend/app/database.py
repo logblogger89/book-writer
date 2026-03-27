@@ -27,6 +27,7 @@ def _apply_migrations(sync_conn):
             sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
     add_if_missing("projects", "current_chapter", "INTEGER NOT NULL DEFAULT 0")
+    add_if_missing("projects", "sub_genre", "VARCHAR")
 
 
 async def init_db():

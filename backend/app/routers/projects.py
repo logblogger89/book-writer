@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.base_agent import gemini_client
 from app.database import get_db
 from app.models.db_models import Phase, PhaseStatus, Project
 from datetime import datetime
@@ -9,12 +13,37 @@ from datetime import datetime
 from app.models.schemas import ModelConfigUpdate, ProjectCreate, ProjectResponse, ProjectUpdate
 from app.pipeline.phase_graph import PHASE_ORDER
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+@router.get("/suggest")
+async def suggest_novel(sub_genre: str | None = Query(default=None)):
+    genre_line = f"Sub-genre: {sub_genre}." if sub_genre else "Pick any compelling sci-fi sub-genre."
+    prompt = (
+        f"You are a creative sci-fi writing assistant. {genre_line}\n"
+        "Generate a single compelling sci-fi novel title and a vivid 2–3 sentence premise.\n"
+        "The premise should name the protagonist, their goal, the central conflict, and what is at stake.\n"
+        "Return valid JSON only — no markdown fences, no explanation:\n"
+        '{"title": "...", "premise": "..."}'
+    )
+    try:
+        resp = await gemini_client.aio.models.generate_content(
+            model="gemini-3.1-flash-lite-preview", contents=prompt
+        )
+        text = resp.text.strip()
+        start, end = text.find("{"), text.rfind("}") + 1
+        if start != -1 and end > start:
+            return json.loads(text[start:end])
+    except Exception as e:
+        logger.error(f"suggest_novel error: {e}")
+    return {"title": "", "premise": ""}
 
 
 @router.post("", response_model=ProjectResponse, status_code=201)
 async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    project = Project(title=body.title, initial_premise=body.initial_premise)
+    project = Project(title=body.title, initial_premise=body.initial_premise, sub_genre=body.sub_genre)
     db.add(project)
     await db.flush()
 

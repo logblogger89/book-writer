@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import choices, pipeline, projects, websocket
+from app.routers import choices, export, pipeline, projects, websocket
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(pipeline.router)
 app.include_router(choices.router)
+app.include_router(export.router)
 app.include_router(websocket.router)
 
 

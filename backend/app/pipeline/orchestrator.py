@@ -363,11 +363,15 @@ async def _run_iterative_phase(
             ev.interrupt_acknowledged(project.id, phase.phase_key, f"Incorporating: {interrupt_message[:100]}"),
         )
 
+    premise = project.initial_premise
+    if project.sub_genre:
+        premise = f"[Sub-genre: {project.sub_genre}]\n{premise}"
+
     ctx = AgentContext(
         project_id=project.id,
         phase_id=phase.id,
         phase_key=phase.phase_key,
-        premise=project.initial_premise,
+        premise=premise,
         artifacts=artifacts_dict,
         chosen_direction="AI_AUTOPILOT",  # always autopilot in the chapter loop
         interrupt_message=interrupt_message,
@@ -558,11 +562,15 @@ async def _generate_and_wait_for_choice(
     all_artifacts = await get_all_active_artifacts(db, project.id)
     artifacts_dict = {a_type: art.content_json for a_type, art in all_artifacts.items()}
 
+    _premise = project.initial_premise
+    if project.sub_genre:
+        _premise = f"[Sub-genre: {project.sub_genre}]\n{_premise}"
+
     ctx = AgentContext(
         project_id=project.id,
         phase_id=phase.id,
         phase_key=phase.phase_key,
-        premise=project.initial_premise,
+        premise=_premise,
         artifacts=artifacts_dict,
         iteration=phase.iteration,
     )

@@ -86,11 +86,15 @@ async def run_phase(
             ev.interrupt_acknowledged(project.id, phase.phase_key, f"Incorporating: {interrupt_message[:100]}"),
         )
 
+    premise = project.initial_premise
+    if project.sub_genre:
+        premise = f"[Sub-genre: {project.sub_genre}]\n{premise}"
+
     ctx = AgentContext(
         project_id=project.id,
         phase_id=phase.id,
         phase_key=phase.phase_key,
-        premise=project.initial_premise,
+        premise=premise,
         artifacts=artifacts_dict,
         chosen_direction=chosen_direction,
         interrupt_message=interrupt_message,

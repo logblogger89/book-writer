@@ -11,6 +11,7 @@ from app.models.db_models import PhaseStatus, ProjectStatus
 class ProjectCreate(BaseModel):
     title: str
     initial_premise: str
+    sub_genre: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -21,6 +22,7 @@ class ProjectResponse(BaseModel):
     id: str
     title: str
     initial_premise: str
+    sub_genre: str | None = None
     status: ProjectStatus
     auto_pilot: bool
     agent_model_config: dict | None = None

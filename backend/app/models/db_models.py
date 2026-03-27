@@ -65,6 +65,7 @@ class Project(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
     title: Mapped[str] = mapped_column(String, nullable=False)
     initial_premise: Mapped[str] = mapped_column(Text, nullable=False)
+    sub_genre: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus), default=ProjectStatus.idle
     )

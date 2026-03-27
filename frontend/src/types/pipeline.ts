@@ -23,6 +23,7 @@ export interface Project {
   id: string;
   title: string;
   initial_premise: string;
+  sub_genre: string | null;
   status: ProjectStatus;
   auto_pilot: boolean;
   created_at: string;

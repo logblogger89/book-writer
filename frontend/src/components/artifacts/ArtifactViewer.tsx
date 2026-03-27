@@ -30,9 +30,17 @@ export function ArtifactViewer() {
 
   const current = artifacts[resolvedKey];
 
-  // Determine available chapter range for navigation
-  const maxChapter = chapterProgress?.currentChapter ?? viewingChapter;
-  const hasAnyChapters = Object.keys(artifacts).some(k => k.startsWith('edited_chapter_'));
+  // Determine available chapter range for navigation.
+  // Derive from actual artifact keys so it works after page reload (chapterProgress is only
+  // populated during a live pipeline run, not restored from DB on reconnect).
+  const completedChapterNums = Object.keys(artifacts)
+    .filter(k => k.startsWith('edited_chapter_'))
+    .map(k => parseInt(k.replace('edited_chapter_', ''), 10))
+    .filter(n => !isNaN(n));
+  const maxChapter = completedChapterNums.length > 0
+    ? Math.max(...completedChapterNums)
+    : (chapterProgress?.currentChapter ?? viewingChapter);
+  const hasAnyChapters = completedChapterNums.length > 0;
 
   const isChapterTab = CHAPTER_TAB_KEYS.has(activeTab);
 
@@ -208,81 +216,143 @@ function WorldView({ data }: { data: Record<string, unknown> }) {
 }
 
 function CharacterView({ data }: { data: Record<string, unknown> }) {
-  const chars = Array.isArray(data.characters) ? data.characters as any[] : [];
+  let chars = Array.isArray(data.characters) ? data.characters as any[] : [];
+
+  // If backend JSON parsing failed, data.raw may contain a JSON string — try to recover
+  if (chars.length === 0 && data.raw) {
+    try {
+      const parsed = JSON.parse(String(data.raw));
+      if (Array.isArray(parsed.characters)) chars = parsed.characters;
+      else if (Array.isArray(parsed)) chars = parsed;
+    } catch { /* not JSON — will fall through to RawFallback */ }
+  }
+
   if (chars.length === 0 && data.raw) {
     return <RawFallback label="Characters" raw={String(data.raw)} />;
   }
+
+  const roleStyle: Record<string, { badge: string; bar: string }> = {
+    protagonist: {
+      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+      bar: 'bg-blue-400 dark:bg-blue-500',
+    },
+    antagonist: {
+      badge: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+      bar: 'bg-red-400 dark:bg-red-500',
+    },
+    supporting: {
+      badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+      bar: 'bg-violet-400 dark:bg-violet-500',
+    },
+    minor: {
+      badge: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+      bar: 'bg-slate-300 dark:bg-slate-600',
+    },
+  };
+
   return (
-    <div className="space-y-4">
-      {chars.map((c, i) => (
-        <div key={i} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
-            <div>
-              <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{c.name}</h4>
-              {(c.occupation || c.faction_affiliation) && (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                  {[c.occupation, c.faction_affiliation].filter(Boolean).join(' · ')}
-                </p>
-              )}
-            </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2 ${
-              c.role === 'protagonist' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300' :
-              c.role === 'antagonist' ? 'bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300' :
-              c.role === 'supporting'  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300' :
-              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-            }`}>{c.role}</span>
-          </div>
+    <div className="space-y-2">
+      {chars.map((c, i) => {
+        const style = roleStyle[c.role] ?? roleStyle.minor;
+        return (
+          <div key={i} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
+            {/* Role accent bar */}
+            <div className={`h-0.5 w-full ${style.bar}`} />
 
-          <div className="px-3 py-2.5 space-y-2">
-            {/* Physical description */}
-            {c.physical_description && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 italic">{c.physical_description}</p>
-            )}
-
-            {/* Background */}
-            {c.background && (
-              <div>
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Background</span>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{c.background}</p>
-              </div>
-            )}
-
-            {/* Core psychology */}
-            <div className="grid grid-cols-1 gap-1">
-              {c.core_wound && <InfoRow label="Core wound" value={c.core_wound} />}
-              {c.motivation && <InfoRow label="Wants" value={c.motivation} />}
-              {c.fear && <InfoRow label="Fears" value={c.fear} />}
-              {c.arc && <InfoRow label="Arc" value={c.arc} />}
-            </div>
-
-            {/* Contradictions */}
-            {Array.isArray(c.contradictions) && c.contradictions.length > 0 && (
-              <div>
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Contradictions</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(c.contradictions as string[]).map((con: string, j: number) => (
-                    <span key={j} className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full">{con}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Voice profile */}
-            {c.voice_profile && (
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 space-y-0.5">
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Voice</span>
-                {c.voice_profile.speech_style && <p className="text-xs text-slate-600 dark:text-slate-300">{c.voice_profile.speech_style}</p>}
-                {c.voice_profile.vocabulary_level && <p className="text-xs text-slate-500 dark:text-slate-400">Vocab: {c.voice_profile.vocabulary_level}</p>}
-                {c.voice_profile.emotional_register && <p className="text-xs text-slate-500 dark:text-slate-400 italic">{c.voice_profile.emotional_register}</p>}
-                {Array.isArray(c.voice_profile.verbal_tics) && c.voice_profile.verbal_tics.length > 0 && (
-                  <p className="text-xs text-slate-400 dark:text-slate-500">"{c.voice_profile.verbal_tics.join('", "')}"</p>
+            {/* Header */}
+            <div className="flex items-start justify-between px-3 py-2">
+              <div className="min-w-0">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{c.name}</h4>
+                {(c.occupation || c.faction_affiliation || c.age) && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                    {[c.age ? `Age ${c.age}` : null, c.occupation, c.faction_affiliation].filter(Boolean).join(' · ')}
+                  </p>
                 )}
               </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize flex-shrink-0 ml-3 mt-0.5 ${style.badge}`}>
+                {c.role}
+              </span>
+            </div>
+
+            {/* Physical description */}
+            {c.physical_description && (
+              <div className="px-3 pb-2 -mt-0.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 italic leading-relaxed">{c.physical_description}</p>
+              </div>
             )}
+
+            <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 space-y-2">
+              {/* Background */}
+              {c.background && (
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">Background</p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{c.background}</p>
+                </div>
+              )}
+
+              {/* Psychology — 2-column grid */}
+              {(c.core_wound || c.motivation || c.fear || c.arc) && (
+                <div className="grid grid-cols-2 gap-1">
+                  {c.core_wound && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wound</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.core_wound}</p>
+                    </div>
+                  )}
+                  {c.motivation && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wants</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.motivation}</p>
+                    </div>
+                  )}
+                  {c.fear && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Fears</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.fear}</p>
+                    </div>
+                  )}
+                  {c.arc && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Arc</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.arc}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Contradictions */}
+              {Array.isArray(c.contradictions) && c.contradictions.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {(c.contradictions as string[]).map((con: string, j: number) => (
+                    <span key={j} className="text-[10px] bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 border border-pink-100 dark:border-pink-900/60 px-1.5 py-0.5 rounded-full">{con}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Voice profile */}
+              {c.voice_profile && (
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2 space-y-0.5">
+                  <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Voice</p>
+                  {c.voice_profile.speech_style && (
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">{c.voice_profile.speech_style}</p>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {c.voice_profile.vocabulary_level && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">Vocab: {c.voice_profile.vocabulary_level}</span>
+                    )}
+                    {c.voice_profile.emotional_register && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">{c.voice_profile.emotional_register}</span>
+                    )}
+                  </div>
+                  {Array.isArray(c.voice_profile.verbal_tics) && c.voice_profile.verbal_tics.length > 0 && (
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">"{c.voice_profile.verbal_tics.join('", "')}"</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

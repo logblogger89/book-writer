@@ -1,15 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
-import { listProjects, createProject, deleteProject, updateProjectTitle } from '../api/projects';
+import { listProjects, createProject, deleteProject, updateProjectTitle, suggestNovel } from '../api/projects';
 import { useStore } from '../store';
 import type { Project } from '../types/pipeline';
-import { BookOpen, Plus, Trash2, ArrowRight, Sparkles, Pencil, Check, X } from 'lucide-react';
+import { BookOpen, Plus, Trash2, ArrowRight, Sparkles, Pencil, Check, X, RefreshCw } from 'lucide-react';
+
+const SF_SUBGENRES = [
+  'Hard Science Fiction',
+  'Space Opera',
+  'Cyberpunk',
+  'Solarpunk',
+  'Biopunk',
+  'Military Science Fiction',
+  'First Contact',
+  'Post-Apocalyptic',
+  'Time Travel',
+  'Dystopian',
+  'Utopian',
+  'Colonization / Terraforming',
+  'AI & Robotics',
+  'Climate Fiction (Cli-Fi)',
+  'Cosmic Horror',
+];
 
 export function ProjectScreen() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const [premise, setPremise] = useState('');
+  const [subGenre, setSubGenre] = useState('');
+  const [customSubGenre, setCustomSubGenre] = useState('');
   const [creating, setCreating] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -30,11 +51,24 @@ export function ProjectScreen() {
     setProjects(data);
   };
 
+  const fetchSuggestion = async (genre?: string) => {
+    setSuggesting(true);
+    try {
+      const resolved = genre === '__custom__' ? customSubGenre.trim() || undefined : genre || undefined;
+      const { data } = await suggestNovel(resolved);
+      if (data.title) setTitle(data.title);
+      if (data.premise) setPremise(data.premise);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!title.trim() || !premise.trim()) return;
     setCreating(true);
     try {
-      const { data } = await createProject(title.trim(), premise.trim());
+      const resolvedGenre = subGenre === '__custom__' ? customSubGenre.trim() : subGenre;
+      const { data } = await createProject(title.trim(), premise.trim(), resolvedGenre || undefined);
       setProject(data.id, data.title);
     } finally {
       setCreating(false);
@@ -101,7 +135,7 @@ export function ProjectScreen() {
         {/* Create new */}
         {!showCreate ? (
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => { setShowCreate(true); fetchSuggestion(); }}
             className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors mb-4 font-medium text-sm"
           >
             <Plus size={16} />
@@ -109,10 +143,21 @@ export function ProjectScreen() {
           </button>
         ) : (
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
-              <Sparkles size={14} className="text-indigo-500" />
-              Start your novel
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                <Sparkles size={14} className="text-indigo-500" />
+                Start your novel
+              </h2>
+              <button
+                onClick={() => fetchSuggestion(subGenre)}
+                disabled={suggesting}
+                className="flex items-center gap-1 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 disabled:opacity-40 transition-colors"
+                title="Generate a new suggestion"
+              >
+                <RefreshCw size={11} className={suggesting ? 'animate-spin' : ''} />
+                {suggesting ? 'Generating…' : 'Regenerate'}
+              </button>
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Novel title</label>
@@ -120,31 +165,57 @@ export function ProjectScreen() {
                   type="text"
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  placeholder="e.g. The Fracture Line"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  placeholder={suggesting ? 'Generating suggestion…' : 'e.g. The Fracture Line'}
+                  disabled={suggesting}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60 disabled:cursor-wait"
                   autoFocus
                 />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Sub-genre <span className="text-slate-400 font-normal">(optional)</span></label>
+                <select
+                  value={subGenre}
+                  onChange={e => { setSubGenre(e.target.value); if (e.target.value !== '__custom__') setCustomSubGenre(''); }}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  <option value="">— Choose a sub-genre —</option>
+                  {SF_SUBGENRES.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                  <option value="__custom__">Other (type your own)…</option>
+                </select>
+                {subGenre === '__custom__' && (
+                  <input
+                    type="text"
+                    value={customSubGenre}
+                    onChange={e => setCustomSubGenre(e.target.value)}
+                    placeholder="e.g. Nanopunk, Gaslamp SF, Hopepunk…"
+                    className="w-full mt-1.5 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    autoFocus
+                  />
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Initial premise</label>
                 <textarea
                   value={premise}
                   onChange={e => setPremise(e.target.value)}
-                  placeholder="Describe your sci-fi concept… e.g. A colony ship carrying the last humans enters a galaxy where time flows backwards, and the crew must decide whether to complete their mission or return to an Earth that grows younger as they travel."
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                  placeholder={suggesting ? 'Generating suggestion…' : 'Describe your sci-fi concept, or use the suggestion above.'}
+                  disabled={suggesting}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none disabled:opacity-60 disabled:cursor-wait"
                   rows={4}
                 />
               </div>
               <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => { setShowCreate(false); setTitle(''); setPremise(''); }}
+                  onClick={() => { setShowCreate(false); setTitle(''); setPremise(''); setSubGenre(''); setCustomSubGenre(''); setSuggesting(false); }}
                   className="px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreate}
-                  disabled={creating || !title.trim() || !premise.trim()}
+                  disabled={creating || suggesting || !title.trim() || !premise.trim()}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors font-medium"
                 >
                   {creating ? 'Creating…' : 'Create & Open'}
