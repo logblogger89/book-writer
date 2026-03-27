@@ -4,8 +4,13 @@ import type { Project } from '../types/pipeline';
 export const suggestNovel = (sub_genre?: string): Promise<{ data: { title: string; premise: string } }> =>
   api.get('/projects/suggest', { params: sub_genre ? { sub_genre } : {} });
 
-export const createProject = (title: string, initial_premise: string, sub_genre?: string): Promise<{ data: Project }> =>
-  api.post('/projects', { title, initial_premise, sub_genre: sub_genre || null });
+export const createProject = (
+  title: string,
+  initial_premise: string,
+  sub_genre?: string,
+  chapter_count?: number,
+): Promise<{ data: Project }> =>
+  api.post('/projects', { title, initial_premise, sub_genre: sub_genre || null, chapter_count: chapter_count ?? null });
 
 export const listProjects = (): Promise<{ data: Project[] }> =>
   api.get('/projects');

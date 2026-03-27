@@ -12,6 +12,7 @@ class ProjectCreate(BaseModel):
     title: str
     initial_premise: str
     sub_genre: str | None = None
+    chapter_count: int | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -23,6 +24,7 @@ class ProjectResponse(BaseModel):
     title: str
     initial_premise: str
     sub_genre: str | None = None
+    chapter_count: int | None = None
     status: ProjectStatus
     auto_pilot: bool
     agent_model_config: dict | None = None

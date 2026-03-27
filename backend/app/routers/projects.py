@@ -43,7 +43,12 @@ async def suggest_novel(sub_genre: str | None = Query(default=None)):
 
 @router.post("", response_model=ProjectResponse, status_code=201)
 async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    project = Project(title=body.title, initial_premise=body.initial_premise, sub_genre=body.sub_genre)
+    project = Project(
+        title=body.title,
+        initial_premise=body.initial_premise,
+        sub_genre=body.sub_genre,
+        chapter_count=body.chapter_count,
+    )
     db.add(project)
     await db.flush()
 

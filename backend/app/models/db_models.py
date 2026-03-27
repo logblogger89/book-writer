@@ -66,6 +66,7 @@ class Project(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     initial_premise: Mapped[str] = mapped_column(Text, nullable=False)
     sub_genre: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    chapter_count: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus), default=ProjectStatus.idle
     )

@@ -90,6 +90,9 @@ async def run_phase(
     if project.sub_genre:
         premise = f"[Sub-genre: {project.sub_genre}]\n{premise}"
 
+    if project.chapter_count:
+        artifacts_dict['_chapter_count'] = project.chapter_count
+
     ctx = AgentContext(
         project_id=project.id,
         phase_id=phase.id,

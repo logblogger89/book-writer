@@ -28,6 +28,7 @@ def _apply_migrations(sync_conn):
 
     add_if_missing("projects", "current_chapter", "INTEGER NOT NULL DEFAULT 0")
     add_if_missing("projects", "sub_genre", "VARCHAR")
+    add_if_missing("projects", "chapter_count", "INTEGER")
 
 
 async def init_db():

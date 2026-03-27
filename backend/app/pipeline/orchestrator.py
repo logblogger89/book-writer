@@ -367,6 +367,9 @@ async def _run_iterative_phase(
     if project.sub_genre:
         premise = f"[Sub-genre: {project.sub_genre}]\n{premise}"
 
+    if project.chapter_count:
+        artifacts_dict['_chapter_count'] = project.chapter_count
+
     ctx = AgentContext(
         project_id=project.id,
         phase_id=phase.id,
@@ -565,6 +568,9 @@ async def _generate_and_wait_for_choice(
     _premise = project.initial_premise
     if project.sub_genre:
         _premise = f"[Sub-genre: {project.sub_genre}]\n{_premise}"
+
+    if project.chapter_count:
+        artifacts_dict['_chapter_count'] = project.chapter_count
 
     ctx = AgentContext(
         project_id=project.id,

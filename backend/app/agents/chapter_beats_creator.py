@@ -56,10 +56,19 @@ class ChapterBeatsCreator(BaseAgent):
             '    }\n'
             '  ]\n'
             "}\n\n"
-            "Target 20-30 chapters across 3 acts. "
+            f"{self._chapter_target_line(ctx)}"
             "Tension levels should build across acts (not uniformly — use valleys for breath and weight). "
             "Every character's arc inflection points must be visible in specific chapters."
         )
+
+    def _chapter_target_line(self, ctx: AgentContext) -> str:
+        count = ctx.artifacts.get("_chapter_count")
+        if count:
+            return (
+                f"You MUST produce EXACTLY {count} chapters total across 3 acts. "
+                f"Do not produce more or fewer than {count} chapters — this is a hard requirement. "
+            )
+        return "Target 20-30 chapters across 3 acts. "
 
     def parse_artifact(self, full_response: str) -> dict:
         # Strip markdown code fences

@@ -29,6 +29,7 @@ export function ProjectScreen() {
   const [premise, setPremise] = useState('');
   const [subGenre, setSubGenre] = useState('');
   const [customSubGenre, setCustomSubGenre] = useState('');
+  const [chapterCount, setChapterCount] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function ProjectScreen() {
     setCreating(true);
     try {
       const resolvedGenre = subGenre === '__custom__' ? customSubGenre.trim() : subGenre;
-      const { data } = await createProject(title.trim(), premise.trim(), resolvedGenre || undefined);
+      const { data } = await createProject(title.trim(), premise.trim(), resolvedGenre || undefined, chapterCount ?? undefined);
       setProject(data.id, data.title);
     } finally {
       setCreating(false);
@@ -195,6 +196,47 @@ export function ProjectScreen() {
                   />
                 )}
               </div>
+              {/* Chapter count stepper */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Chapters <span className="text-slate-400 dark:text-slate-500 font-normal">(optional · max 40)</span>
+                  </label>
+                  {chapterCount !== null && (
+                    <button
+                      onClick={() => setChapterCount(null)}
+                      className="text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                    >
+                      Let AI decide
+                    </button>
+                  )}
+                </div>
+                {chapterCount === null ? (
+                  <button
+                    onClick={() => setChapterCount(20)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:border-indigo-400 hover:text-indigo-500 dark:hover:border-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    <span className="text-base leading-none">+</span> Set a specific chapter count
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setChapterCount(c => Math.max(1, (c ?? 1) - 1))}
+                      disabled={chapterCount <= 1}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-base font-medium transition-colors flex-shrink-0"
+                    >−</button>
+                    <div className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40">
+                      <span className="text-base font-semibold text-indigo-700 dark:text-indigo-300 tabular-nums w-6 text-center">{chapterCount}</span>
+                      <span className="text-xs text-indigo-500 dark:text-indigo-400">chapter{chapterCount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <button
+                      onClick={() => setChapterCount(c => Math.min(40, (c ?? 40) + 1))}
+                      disabled={chapterCount >= 40}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-base font-medium transition-colors flex-shrink-0"
+                    >+</button>
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Initial premise</label>
                 <textarea
@@ -208,7 +250,7 @@ export function ProjectScreen() {
               </div>
               <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => { setShowCreate(false); setTitle(''); setPremise(''); setSubGenre(''); setCustomSubGenre(''); setSuggesting(false); }}
+                  onClick={() => { setShowCreate(false); setTitle(''); setPremise(''); setSubGenre(''); setCustomSubGenre(''); setChapterCount(null); setSuggesting(false); }}
                   className="px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   Cancel

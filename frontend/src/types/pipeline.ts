@@ -24,6 +24,7 @@ export interface Project {
   title: string;
   initial_premise: string;
   sub_genre: string | null;
+  chapter_count: number | null;
   status: ProjectStatus;
   auto_pilot: boolean;
   created_at: string;
