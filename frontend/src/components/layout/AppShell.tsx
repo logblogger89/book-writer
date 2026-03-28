@@ -133,22 +133,22 @@ export function AppShell() {
       {/* 3-panel resizable layout */}
       <PanelGroup direction="horizontal" className="flex-1 min-h-0">
         {/* Left: Expert graph + timeline */}
-        <Panel defaultSize={22} minSize={15} maxSize={35}>
+        <Panel defaultSize={20} minSize={15} maxSize={35}>
           <LeftPanel />
         </Panel>
 
         <PanelResizeHandle className="w-1 bg-slate-200 dark:bg-slate-700 hover:bg-indigo-400 dark:hover:bg-indigo-600 transition-colors cursor-col-resize flex-shrink-0" />
 
-        {/* Center: Streaming log + choice + interrupt */}
+        {/* Center: Artifact viewer (info-dense, moved to center) */}
         <Panel defaultSize={55} minSize={30}>
-          <CenterPanel onInterrupt={handleInterrupt} />
+          <RightPanel />
         </Panel>
 
         <PanelResizeHandle className="w-1 bg-slate-200 dark:bg-slate-700 hover:bg-indigo-400 dark:hover:bg-indigo-600 transition-colors cursor-col-resize flex-shrink-0" />
 
-        {/* Right: Artifact viewer */}
-        <Panel defaultSize={23} minSize={15} maxSize={40}>
-          <RightPanel />
+        {/* Right: Streaming log + choice + interrupt */}
+        <Panel defaultSize={25} minSize={15} maxSize={40}>
+          <CenterPanel onInterrupt={handleInterrupt} />
         </Panel>
       </PanelGroup>
     </div>

@@ -26,3 +26,6 @@ export const resolveChoice = (projectId: string, choiceId: string, chosen_option
 
 export const getPendingChoice = (projectId: string) =>
   api.get(`/projects/${projectId}/choices/pending`);
+
+export const updateArtifact = (projectId: string, artifactId: string, contentJson: unknown) =>
+  api.patch(`/projects/${projectId}/artifacts/${artifactId}`, { content_json: contentJson });

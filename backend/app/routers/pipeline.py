@@ -5,13 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.db_models import Phase, PhaseStatus, Project, ProjectStatus
-from app.models.schemas import AutoPilotToggle, PhaseResponse, RollbackRequest
+from app.models.db_models import Artifact, Phase, PhaseStatus, Project, ProjectStatus
+from app.models.schemas import ArtifactResponse, ArtifactUpdate, AutoPilotToggle, PhaseResponse, RollbackRequest
 from app.pipeline import orchestrator
 from app.pipeline.phase_graph import PHASE_ORDER
 from app.pipeline.rollback_manager import rollback_to_phase
 from app.services.artifact_service import get_all_active_artifacts
-from app.models.schemas import ArtifactResponse
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["pipeline"])
 
@@ -128,3 +127,20 @@ async def get_artifacts(project_id: str, db: AsyncSession = Depends(get_db)):
     artifacts = await get_all_active_artifacts(db, project_id)
     return {k: {"id": v.id, "type": v.artifact_type, "version": v.version, "content": v.content_json}
             for k, v in artifacts.items()}
+
+
+@router.patch("/artifacts/{artifact_id}", response_model=ArtifactResponse)
+async def update_artifact(
+    project_id: str,
+    artifact_id: str,
+    body: ArtifactUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    artifact = await db.get(Artifact, artifact_id)
+    if not artifact or artifact.project_id != project_id:
+        raise HTTPException(404, "Artifact not found")
+    artifact.content_json = body.content_json
+    artifact.version = artifact.version + 1
+    await db.commit()
+    await db.refresh(artifact)
+    return artifact

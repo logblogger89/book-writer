@@ -1,16 +1,35 @@
 import api from './client';
 import type { Project } from '../types/pipeline';
 
-export const suggestNovel = (sub_genre?: string): Promise<{ data: { title: string; premise: string } }> =>
-  api.get('/projects/suggest', { params: sub_genre ? { sub_genre } : {} });
+export interface LoglineOption {
+  title: string;
+  logline: string;
+  thematic_pillars: string[];
+  central_conflict: string;
+  hook_elements: string[];
+  tone: string;
+  comparable_titles: string[];
+}
+
+export const suggestLoglines = (
+  sub_genre?: string,
+  provider?: string,
+  model?: string,
+): Promise<{ data: { options: LoglineOption[] } }> => {
+  const params: Record<string, string> = {};
+  if (sub_genre) params.sub_genre = sub_genre;
+  if (provider) params.provider = provider;
+  if (model) params.model = model;
+  return api.get('/projects/suggest-loglines', { params });
+};
 
 export const createProject = (
   title: string,
-  initial_premise: string,
+  logline_artifact: object,
   sub_genre?: string,
   chapter_count?: number,
 ): Promise<{ data: Project }> =>
-  api.post('/projects', { title, initial_premise, sub_genre: sub_genre || null, chapter_count: chapter_count ?? null });
+  api.post('/projects', { title, logline_artifact, sub_genre: sub_genre || null, chapter_count: chapter_count ?? null });
 
 export const listProjects = (): Promise<{ data: Project[] }> =>
   api.get('/projects');

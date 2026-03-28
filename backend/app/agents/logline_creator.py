@@ -31,7 +31,11 @@ class LoglineCreator(BaseAgent):
             '  "tone": "e.g. dark and cerebral / hopeful and action-packed / bittersweet and literary",\n'
             '  "comparable_titles": ["comp title 1 (reason)", "comp title 2 (reason)"]\n'
             "}\n\n"
-            "Make it unforgettable. This logline sets the creative DNA for the entire novel."
+            "Make it unforgettable. This logline sets the creative DNA for the entire novel.\n\n"
+            "IMPORTANT: Do NOT name any characters in this artifact. Refer to characters by role or "
+            "archetype only (e.g. 'a disgraced cartographer', 'the colony's last engineer', "
+            "'a collective of deep-crust workers'). Character names are introduced exclusively by the "
+            "Persona Creator in a later phase."
         )
 
     def parse_artifact(self, full_response: str) -> dict:

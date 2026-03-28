@@ -22,6 +22,7 @@ class ProseWriter(BaseAgent):
         )
 
     def build_user_prompt(self, ctx: AgentContext) -> str:
+        logline = ctx.artifacts.get("logline", {})
         world_doc = ctx.artifacts.get("world_doc", {})
         characters = ctx.artifacts.get("character_sheet", {})
         chapter_beat = ctx.artifacts.get("current_chapter_beat", {})
@@ -29,6 +30,7 @@ class ProseWriter(BaseAgent):
         dialogue_drafts = ctx.artifacts.get("dialogue_drafts", [])
         prior_summaries = ctx.artifacts.get("prior_prose_summaries", [])
         direction = self._direction_block(ctx)
+        comparable = self._comparable_titles_block(ctx)
 
         prior_block = ""
         if prior_summaries:
@@ -37,12 +39,14 @@ class ProseWriter(BaseAgent):
             )
 
         return (
+            f"LOGLINE:\n{json.dumps(logline, indent=2)}\n\n"
             f"WORLD:\n{json.dumps(world_doc, indent=2)}\n\n"
             f"CHARACTERS:\n{json.dumps(characters, indent=2)}\n\n"
             f"THIS CHAPTER'S BEAT:\n{json.dumps(chapter_beat, indent=2)}\n\n"
             f"SCENE OUTLINE:\n{json.dumps(scene_outline, indent=2)}\n\n"
             f"DIALOGUE DRAFTS:\n{json.dumps(dialogue_drafts, indent=2)}\n"
             f"{prior_block}\n"
+            f"{comparable}"
             f"{direction}\n\n"
             "Write the complete prose for this chapter. "
             "Target 3,000-5,000 words. "

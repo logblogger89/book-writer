@@ -26,11 +26,13 @@ class ChapterBeatsCreator(BaseAgent):
         characters = ctx.artifacts.get("character_sheet", {})
         science = ctx.artifacts.get("science_notes", {})
         direction = self._direction_block(ctx)
+        comparable = self._comparable_titles_block(ctx)
         return (
             f"LOGLINE:\n{json.dumps(logline, indent=2)}\n\n"
             f"WORLD:\n{json.dumps(world_doc, indent=2)}\n\n"
             f"CHARACTERS:\n{json.dumps(characters, indent=2)}\n\n"
             f"SCIENCE NOTES:\n{json.dumps(science, indent=2)}\n"
+            f"{comparable}"
             f"{direction}\n\n"
             "Produce a complete novel structure as JSON:\n"
             "{\n"

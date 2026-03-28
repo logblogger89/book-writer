@@ -38,6 +38,7 @@ interface AppStore {
   // Artifacts
   artifacts: Record<string, { id: string; type: string; version: number; content: unknown }>;
   setArtifact: (type: string, id: string, version: number, content: unknown) => void;
+  updateArtifactContent: (type: string, content: unknown, version: number) => void;
 
   // Choice
   pendingChoice: PendingChoice | null;
@@ -188,6 +189,12 @@ export const useStore = create<AppStore>((set) => ({
     set(state => ({
       artifacts: { ...state.artifacts, [type]: { id, type, version, content } },
     })),
+  updateArtifactContent: (type, content, version) =>
+    set(state => {
+      const existing = state.artifacts[type];
+      if (!existing) return state;
+      return { artifacts: { ...state.artifacts, [type]: { ...existing, content, version } } };
+    }),
 
   pendingChoice: null,
   setPendingChoice: (choice) => set({ pendingChoice: choice }),

@@ -20,8 +20,10 @@ class WorldBuilder(BaseAgent):
     def build_user_prompt(self, ctx: AgentContext) -> str:
         logline = ctx.artifacts.get("logline", {})
         direction = self._direction_block(ctx)
+        comparable = self._comparable_titles_block(ctx)
         return (
             f"LOGLINE & CREATIVE FRAMEWORK:\n{json.dumps(logline, indent=2)}\n"
+            f"{comparable}"
             f"{direction}\n\n"
             "Build a complete world document as a JSON object:\n"
             "{\n"
@@ -45,7 +47,11 @@ class WorldBuilder(BaseAgent):
             '  "daily_life": "What ordinary people experience day to day",\n'
             '  "central_tension": "The world-level conflict that the novel\'s story emerges from"\n'
             "}\n\n"
-            "Make every detail feel earned and specific. Avoid generic sci-fi tropes unless you subvert them."
+            "Make every detail feel earned and specific. Avoid generic sci-fi tropes unless you subvert them.\n\n"
+            "NAMING: Do NOT use generic sci-fi naming patterns — no 'The Alliance', 'Nexus Corp', 'New Earth', "
+            "'The Federation', 'Terra Nova', 'The Collective'. World names, faction names, and location names "
+            "must feel culturally and linguistically native to this specific world's history, dominant language "
+            "roots, and social evolution. Names should be pronounceable but unmistakably belong to this world alone."
         )
 
     def parse_artifact(self, full_response: str) -> dict:

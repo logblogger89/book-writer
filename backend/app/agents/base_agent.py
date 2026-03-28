@@ -223,6 +223,18 @@ class BaseAgent(ABC):
         except json.JSONDecodeError:
             return None
 
+    def _comparable_titles_block(self, ctx: AgentContext) -> str:
+        titles = ctx.artifacts.get("logline", {}).get("comparable_titles", [])
+        if not titles:
+            return ""
+        titles_list = "\n".join(f"  - {t}" for t in titles)
+        return (
+            f"\n\nCOMPARABLE TITLES (for creative inspiration only):\n{titles_list}\n"
+            "Draw on these works for tonal, structural, or thematic inspiration — "
+            "pacing, prose style, thematic complexity, narrative approach. "
+            "Do NOT reproduce their specific characters, worlds, or storylines."
+        )
+
     def _direction_block(self, ctx: AgentContext) -> str:
         parts = []
         if ctx.rollback_context:

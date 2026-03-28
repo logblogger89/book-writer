@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { useStore } from '../../store';
+import { updateArtifact } from '../../api/pipeline';
+import { CharacterEditModal, type CharacterData } from './CharacterEditModal';
 
 // Tabs that generate one artifact per chapter (stored as base_key_N)
 const CHAPTER_TAB_KEYS = new Set(['scene_outline', 'prose_chapter', 'continuity_report', 'edited_chapter']);
@@ -109,14 +112,14 @@ export function ArtifactViewer() {
             </p>
           </div>
         ) : (
-          <ArtifactContent type={activeTab} content={current.content} version={current.version} />
+          <ArtifactContent type={activeTab} content={current.content} version={current.version} artifactId={current.id} />
         )}
       </div>
     </div>
   );
 }
 
-function ArtifactContent({ type, content, version }: { type: string; content: unknown; version: number }) {
+function ArtifactContent({ type, content, version, artifactId }: { type: string; content: unknown; version: number; artifactId: string }) {
   const data = content as Record<string, unknown>;
 
   return (
@@ -124,17 +127,17 @@ function ArtifactContent({ type, content, version }: { type: string; content: un
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-slate-400 dark:text-slate-500">Version {version}</span>
       </div>
-      <ArtifactBody type={type} data={data} />
+      <ArtifactBody type={type} data={data} artifactId={artifactId} />
     </div>
   );
 }
 
-function ArtifactBody({ type, data }: { type: string; data: Record<string, unknown> }) {
+function ArtifactBody({ type, data, artifactId }: { type: string; data: Record<string, unknown>; artifactId: string }) {
   // Strip chapter suffix (_1, _2, …) to get the base type for routing
   const baseType = type.replace(/_\d+$/, '');
-  if (baseType === 'logline') return <LoglineView data={data} />;
+  if (baseType === 'logline') return <LoglineView data={data} artifactId={artifactId} artifactType={type} />;
   if (baseType === 'world_doc') return <WorldView data={data} />;
-  if (baseType === 'character_sheet') return <CharacterView data={data} />;
+  if (baseType === 'character_sheet') return <CharacterView data={data} artifactId={artifactId} artifactType={type} />;
   if (baseType === 'science_notes') return <ScienceView data={data} />;
   if (baseType === 'chapter_beats') return <BeatsView data={data} />;
   if (baseType === 'prose_chapter' || baseType === 'edited_chapter') return <ProseView data={data} />;
@@ -148,7 +151,41 @@ function ArtifactBody({ type, data }: { type: string; data: Record<string, unkno
   );
 }
 
-function LoglineView({ data }: { data: Record<string, unknown> }) {
+function LoglineView({ data, artifactId, artifactType }: { data: Record<string, unknown>; artifactId: string; artifactType: string }) {
+  const projectId = useStore(s => s.projectId);
+  const updateArtifactContent = useStore(s => s.updateArtifactContent);
+  const [titles, setTitles] = useState<string[]>(
+    Array.isArray(data.comparable_titles) ? (data.comparable_titles as string[]) : []
+  );
+  const [newTitle, setNewTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const saveTitles = async (updated: string[]) => {
+    if (!projectId) return;
+    setSaving(true);
+    try {
+      const res = await updateArtifact(projectId, artifactId, { ...data, comparable_titles: updated });
+      updateArtifactContent(artifactType, (res.data as any).content_json, (res.data as any).version);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = (i: number) => {
+    const updated = titles.filter((_, idx) => idx !== i);
+    setTitles(updated);
+    saveTitles(updated);
+  };
+
+  const handleAdd = () => {
+    const val = newTitle.trim();
+    if (!val) return;
+    const updated = [...titles, val];
+    setTitles(updated);
+    setNewTitle('');
+    saveTitles(updated);
+  };
+
   return (
     <div className="space-y-3">
       <div className="bg-indigo-50 dark:bg-indigo-950 rounded-lg p-3 border border-indigo-100 dark:border-indigo-900">
@@ -168,16 +205,40 @@ function LoglineView({ data }: { data: Record<string, unknown> }) {
           </div>
         </div>
       )}
-      {Array.isArray(data.comparable_titles) && (
-        <div>
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Comparable Titles</span>
-          <div className="mt-1 space-y-0.5">
-            {(data.comparable_titles as string[]).map((t, i) => (
-              <p key={i} className="text-xs text-slate-600 dark:text-slate-300">• {t}</p>
-            ))}
-          </div>
+      <div>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          Comparable Titles
+          {saving && <span className="ml-1.5 text-[10px] font-normal text-slate-400 dark:text-slate-500">saving…</span>}
+        </span>
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          {titles.map((t, i) => (
+            <span key={i} className="inline-flex items-center gap-1 text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">
+              {t}
+              <button
+                onClick={() => handleRemove(i)}
+                className="ml-0.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 leading-none transition-colors"
+                aria-label="Remove"
+              >×</button>
+            </span>
+          ))}
         </div>
-      )}
+        <div className="flex gap-2 mt-2">
+          <input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+            placeholder="Add comparable title…"
+            className="flex-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder-slate-300 dark:placeholder-slate-600"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!newTitle.trim()}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -215,13 +276,22 @@ function WorldView({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-function CharacterView({ data }: { data: Record<string, unknown> }) {
+function CharacterView({ data, artifactId, artifactType }: { data: Record<string, unknown>; artifactId: string; artifactType: string }) {
+  const projectId = useStore(s => s.projectId);
+  const updateArtifactContent = useStore(s => s.updateArtifactContent);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
   let chars = Array.isArray(data.characters) ? data.characters as any[] : [];
 
   // If backend JSON parsing failed, data.raw may contain a JSON string — try to recover
   if (chars.length === 0 && data.raw) {
     try {
-      const parsed = JSON.parse(String(data.raw));
+      // Strip markdown code fences (```json ... ```) if present
+      let rawStr = String(data.raw).trim();
+      rawStr = rawStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      // Fix invalid JSON patterns: e.g. "age": 44 (at time of vitrification) → "age": 44
+      rawStr = rawStr.replace(/:\s*(\d+)\s*\([^)]*\)/g, ': $1');
+      const parsed = JSON.parse(rawStr);
       if (Array.isArray(parsed.characters)) chars = parsed.characters;
       else if (Array.isArray(parsed)) chars = parsed;
     } catch { /* not JSON — will fall through to RawFallback */ }
@@ -229,6 +299,14 @@ function CharacterView({ data }: { data: Record<string, unknown> }) {
 
   if (chars.length === 0 && data.raw) {
     return <RawFallback label="Characters" raw={String(data.raw)} />;
+  }
+
+  async function handleSaveCharacter(index: number, updated: CharacterData) {
+    if (!projectId) return;
+    const newChars = chars.map((c, i) => (i === index ? updated : c));
+    const newContent = { ...data, characters: newChars };
+    const res = await updateArtifact(projectId, artifactId, newContent);
+    updateArtifactContent(artifactType, (res.data as any).content_json, (res.data as any).version);
   }
 
   const roleStyle: Record<string, { badge: string; bar: string }> = {
@@ -250,110 +328,156 @@ function CharacterView({ data }: { data: Record<string, unknown> }) {
     },
   };
 
+  // Build id → name lookup so legacy "char_001" keys resolve to display names
+  const idToName: Record<string, string> = {};
+  for (const c of chars) {
+    if (c.id) idToName[c.id] = c.name;
+  }
+
   return (
-    <div className="space-y-2">
-      {chars.map((c, i) => {
-        const style = roleStyle[c.role] ?? roleStyle.minor;
-        return (
-          <div key={i} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
-            {/* Role accent bar */}
-            <div className={`h-0.5 w-full ${style.bar}`} />
+    <>
+      <div className="space-y-2">
+        {chars.map((c, i) => {
+          const style = roleStyle[c.role] ?? roleStyle.minor;
+          return (
+            <div key={i} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900 group">
+              {/* Role accent bar */}
+              <div className={`h-0.5 w-full ${style.bar}`} />
 
-            {/* Header */}
-            <div className="flex items-start justify-between px-3 py-2">
-              <div className="min-w-0">
-                <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{c.name}</h4>
-                {(c.occupation || c.faction_affiliation || c.age) && (
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
-                    {[c.age ? `Age ${c.age}` : null, c.occupation, c.faction_affiliation].filter(Boolean).join(' · ')}
-                  </p>
+              {/* Header */}
+              <div className="flex items-start justify-between px-3 py-2">
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{c.name}</h4>
+                  {(c.occupation || c.faction_affiliation || c.age) && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                      {[c.age ? `Age ${c.age}` : null, c.occupation, c.faction_affiliation].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3 mt-0.5">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${style.badge}`}>
+                    {c.role}
+                  </span>
+                  <button
+                    onClick={() => setEditingIndex(i)}
+                    className="p-1 rounded-md text-slate-300 dark:text-slate-600 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Edit character"
+                    aria-label="Edit character"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Physical description */}
+              {c.physical_description && (
+                <div className="px-3 pb-2 -mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 italic leading-relaxed">{c.physical_description}</p>
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 space-y-2">
+                {/* Background */}
+                {c.background && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">Background</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{c.background}</p>
+                  </div>
                 )}
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize flex-shrink-0 ml-3 mt-0.5 ${style.badge}`}>
-                {c.role}
-              </span>
-            </div>
 
-            {/* Physical description */}
-            {c.physical_description && (
-              <div className="px-3 pb-2 -mt-0.5">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 italic leading-relaxed">{c.physical_description}</p>
-              </div>
-            )}
-
-            <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 space-y-2">
-              {/* Background */}
-              {c.background && (
-                <div>
-                  <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">Background</p>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{c.background}</p>
-                </div>
-              )}
-
-              {/* Psychology — 2-column grid */}
-              {(c.core_wound || c.motivation || c.fear || c.arc) && (
-                <div className="grid grid-cols-2 gap-1">
-                  {c.core_wound && (
-                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
-                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wound</p>
-                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.core_wound}</p>
-                    </div>
-                  )}
-                  {c.motivation && (
-                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
-                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wants</p>
-                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.motivation}</p>
-                    </div>
-                  )}
-                  {c.fear && (
-                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
-                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Fears</p>
-                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.fear}</p>
-                    </div>
-                  )}
-                  {c.arc && (
-                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
-                      <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Arc</p>
-                      <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.arc}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Contradictions */}
-              {Array.isArray(c.contradictions) && c.contradictions.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {(c.contradictions as string[]).map((con: string, j: number) => (
-                    <span key={j} className="text-[10px] bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 border border-pink-100 dark:border-pink-900/60 px-1.5 py-0.5 rounded-full">{con}</span>
-                  ))}
-                </div>
-              )}
-
-              {/* Voice profile */}
-              {c.voice_profile && (
-                <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2 space-y-0.5">
-                  <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Voice</p>
-                  {c.voice_profile.speech_style && (
-                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">{c.voice_profile.speech_style}</p>
-                  )}
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    {c.voice_profile.vocabulary_level && (
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500">Vocab: {c.voice_profile.vocabulary_level}</span>
+                {/* Psychology — 2-column grid */}
+                {(c.core_wound || c.motivation || c.fear || c.arc) && (
+                  <div className="grid grid-cols-2 gap-1">
+                    {c.core_wound && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wound</p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.core_wound}</p>
+                      </div>
                     )}
-                    {c.voice_profile.emotional_register && (
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">{c.voice_profile.emotional_register}</span>
+                    {c.motivation && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wants</p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.motivation}</p>
+                      </div>
+                    )}
+                    {c.fear && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Fears</p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.fear}</p>
+                      </div>
+                    )}
+                    {c.arc && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-1.5">
+                        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Arc</p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">{c.arc}</p>
+                      </div>
                     )}
                   </div>
-                  {Array.isArray(c.voice_profile.verbal_tics) && c.voice_profile.verbal_tics.length > 0 && (
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">"{c.voice_profile.verbal_tics.join('", "')}"</p>
-                  )}
-                </div>
-              )}
+                )}
+
+                {/* Contradictions */}
+                {Array.isArray(c.contradictions) && c.contradictions.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(c.contradictions as string[]).map((con: string, j: number) => (
+                      <span key={j} className="text-[10px] bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 border border-pink-100 dark:border-pink-900/60 px-1.5 py-0.5 rounded-full">{con}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Voice profile */}
+                {c.voice_profile && (
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2 space-y-0.5">
+                    <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Voice</p>
+                    {c.voice_profile.speech_style && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">{c.voice_profile.speech_style}</p>
+                    )}
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                      {c.voice_profile.vocabulary_level && (
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Vocab: {c.voice_profile.vocabulary_level}</span>
+                      )}
+                      {c.voice_profile.emotional_register && (
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">{c.voice_profile.emotional_register}</span>
+                      )}
+                    </div>
+                    {Array.isArray(c.voice_profile.verbal_tics) && c.voice_profile.verbal_tics.length > 0 && (
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">"{c.voice_profile.verbal_tics.join('", "')}"</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Relationships */}
+                {c.relationships && Object.keys(c.relationships).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Relationships</p>
+                    <div className="space-y-1">
+                      {Object.entries(c.relationships as Record<string, string>).map(([key, desc]) => (
+                        <div key={key} className="bg-slate-50 dark:bg-slate-800/60 rounded px-2.5 py-1.5">
+                          <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                            {idToName[key] ?? key}
+                          </p>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mt-0.5">{desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/* Edit modal */}
+      {editingIndex !== null && chars[editingIndex] && (
+        <CharacterEditModal
+          character={chars[editingIndex] as CharacterData}
+          onSave={(updated) => handleSaveCharacter(editingIndex, updated)}
+          onClose={() => setEditingIndex(null)}
+        />
+      )}
+    </>
   );
 }
 

@@ -10,9 +10,10 @@ from app.models.db_models import PhaseStatus, ProjectStatus
 
 class ProjectCreate(BaseModel):
     title: str
-    initial_premise: str
+    initial_premise: str = ""
     sub_genre: str | None = None
     chapter_count: int | None = None
+    logline_artifact: dict | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -60,6 +61,10 @@ class ArtifactResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ArtifactUpdate(BaseModel):
+    content_json: dict
 
 
 # ── Choice ────────────────────────────────────────────────────────────────────

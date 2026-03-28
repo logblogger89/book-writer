@@ -531,6 +531,14 @@ async def _run_chapter_loop(
         duration_ms = int((datetime.utcnow() - chapter_start).total_seconds() * 1000)
         await ws_manager.broadcast(project.id, ev.chapter_completed(project.id, chapter_num, total_chapters, duration_ms))
 
+        # Respect co-pilot toggle: if user switched mode, pause before next chapter
+        await db.refresh(project)
+        if not project.auto_pilot and chapter_num < total_chapters:
+            resume_event.clear()
+            project.status = ProjectStatus.paused
+            await db.commit()
+            await ws_manager.broadcast(project.id, ev.pipeline_paused(project.id, "prose_writer"))
+
     # All chapters done — mark all three phases complete
     now = datetime.utcnow()
     for phase in [prose_phase, continuity_phase, literary_phase]:
