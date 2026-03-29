@@ -1,12 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useStore } from '../../store';
 import { useWebSocket } from '../../ws/useWebSocket';
 import { LeftPanel } from './LeftPanel';
 import { CenterPanel } from './CenterPanel';
 import { RightPanel } from './RightPanel';
-import { startPipeline, toggleAutoPilot } from '../../api/pipeline';
-import { Sun, Moon, Play, Pause, Wand2, User, BookOpen } from 'lucide-react';
+import { startPipeline, toggleAutoPilot, runFinalReview } from '../../api/pipeline';
+import { exportNovel } from '../../api/export';
+import { Sun, Moon, Play, Pause, Wand2, User, BookOpen, Download, Search } from 'lucide-react';
 
 export function AppShell() {
   const projectId = useStore(s => s.projectId);
@@ -17,8 +18,23 @@ export function AppShell() {
   const toggleDark = useStore(s => s.toggleDarkMode);
   const setAutoPilot = useStore(s => s.setAutoPilot);
   const clearProject = useStore(s => s.clearProject);
+  const reviewStatus = useStore(s => s.reviewStatus);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingDocx, setExportingDocx] = useState(false);
 
   const { send } = useWebSocket(projectId);
+
+  const handleExport = async (format: 'pdf' | 'docx') => {
+    if (!projectId) return;
+    if (format === 'pdf') setExportingPdf(true);
+    else setExportingDocx(true);
+    try {
+      await exportNovel(projectId, format);
+    } finally {
+      if (format === 'pdf') setExportingPdf(false);
+      else setExportingDocx(false);
+    }
+  };
 
   // Apply dark class to html element
   useEffect(() => {
@@ -112,11 +128,56 @@ export function AppShell() {
             </button>
           )}
 
-          {/* Status badge */}
+          {/* Status badge + export buttons */}
           {projectStatus === 'complete' && (
-            <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 px-2 py-1 rounded-full font-medium">
-              ✓ Complete
-            </span>
+            <>
+              <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 px-2 py-1 rounded-full font-medium">
+                ✓ Complete
+              </span>
+              <button
+                onClick={() => projectId && runFinalReview(projectId)}
+                disabled={reviewStatus === 'running' || reviewStatus === 'fixing'}
+                className={`
+                  flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border
+                  ${reviewStatus === 'running' || reviewStatus === 'fixing'
+                    ? 'bg-cyan-100 text-cyan-600 border-cyan-300 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-700 cursor-wait'
+                    : reviewStatus === 'complete' || reviewStatus === 'fix_complete'
+                      ? 'bg-cyan-50 text-cyan-700 border-cyan-300 hover:bg-cyan-100 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-700 dark:hover:bg-cyan-900'
+                      : 'bg-cyan-50 text-cyan-700 border-cyan-300 hover:bg-cyan-100 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-700 dark:hover:bg-cyan-900'
+                  }
+                  disabled:opacity-50
+                `}
+                title="Review final draft for inconsistencies"
+              >
+                {reviewStatus === 'running' ? (
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <Search size={12} />
+                )}
+                {reviewStatus === 'running' ? 'Reviewing…' : reviewStatus === 'fixing' ? 'Fixing…' : 'Review'}
+              </button>
+              <button
+                onClick={() => handleExport('pdf')}
+                disabled={exportingPdf}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                title="Download PDF"
+              >
+                <Download size={12} />
+                {exportingPdf ? 'Exporting…' : 'PDF'}
+              </button>
+              <button
+                onClick={() => handleExport('docx')}
+                disabled={exportingDocx}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                title="Download DOCX"
+              >
+                <Download size={12} />
+                {exportingDocx ? 'Exporting…' : 'DOCX'}
+              </button>
+            </>
           )}
 
           {/* Dark mode toggle */}

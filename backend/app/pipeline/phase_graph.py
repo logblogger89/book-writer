@@ -13,6 +13,7 @@ PHASE_ORDER = [
     "prose_writer",
     "continuity_editor",
     "literary_editor",
+    "final_draft_reviewer",
 ]
 
 # Direct dependencies for each phase
@@ -26,6 +27,7 @@ PHASE_DEPENDENCIES: dict[str, list[str]] = {
     "prose_writer": ["scene_outliner"],
     "continuity_editor": ["prose_writer"],
     "literary_editor": ["continuity_editor"],
+    "final_draft_reviewer": ["literary_editor"],
 }
 
 # Human-readable display names
@@ -39,10 +41,14 @@ PHASE_DISPLAY_NAMES: dict[str, str] = {
     "prose_writer": "Prose Writer",
     "continuity_editor": "Continuity Editor",
     "literary_editor": "Literary Editor",
+    "final_draft_reviewer": "Draft Reviewer",
 }
 
 # Phases that run iteratively (per chapter)
 ITERATIVE_PHASES = {"prose_writer", "continuity_editor", "literary_editor"}
+
+# Phases that run on-demand (not part of the automatic pipeline)
+ON_DEMAND_PHASES = {"final_draft_reviewer"}
 
 
 def get_ready_phases(completed: set[str], running: set[str]) -> list[str]:

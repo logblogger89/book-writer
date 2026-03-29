@@ -1,14 +1,18 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { CheckCircle, AlertCircle, Clock, RefreshCw, Loader } from 'lucide-react';
+import { CheckCircle, AlertCircle, Clock, RefreshCw, Loader, Search } from 'lucide-react';
 import type { PhaseStatus } from '../../types/pipeline';
 import { PHASE_DISPLAY_NAMES } from '../../types/pipeline';
 import type { ModelAssignment } from '../../store';
+
+// On-demand phases show a dashed border and lock icon when pending
+const ON_DEMAND_PHASES = new Set(['final_draft_reviewer']);
 
 interface NodeData {
   phase_key: string;
   status: PhaseStatus;
   iteration: number;
   isActive: boolean;
+  isEnabled: boolean;
   modelAssignment: ModelAssignment | null;
   [key: string]: unknown;
 }
@@ -43,14 +47,32 @@ export function ExpertNode({ data }: NodeProps) {
   const cfg = statusConfig[nodeData.status] ?? statusConfig.pending;
   const name = PHASE_DISPLAY_NAMES[nodeData.phase_key] ?? nodeData.phase_key;
   const isActive = nodeData.isActive;
+  const isOnDemand = ON_DEMAND_PHASES.has(nodeData.phase_key);
+  const isEnabled = nodeData.isEnabled !== false;
+  const isPendingOnDemand = isOnDemand && nodeData.status === 'pending';
+
+  // On-demand pending nodes get a special dashed style
+  const borderStyle = isPendingOnDemand && !isEnabled
+    ? 'border-dashed border-slate-300 dark:border-slate-600'
+    : cfg.border;
+  const bgStyle = isPendingOnDemand && !isEnabled
+    ? 'bg-slate-50/60 dark:bg-slate-800/40'
+    : cfg.bg;
+  const icon = isPendingOnDemand && isEnabled
+    ? <Search size={14} className="text-cyan-500" />
+    : isPendingOnDemand && !isEnabled
+      ? <Clock size={14} className="text-slate-300 dark:text-slate-600" />
+      : cfg.icon;
 
   return (
     <div
       className={`
         relative px-3 py-2 rounded-lg border-2 text-sm font-medium min-w-[140px] text-center
         transition-all duration-300
-        ${cfg.bg} ${cfg.border}
+        ${bgStyle} ${borderStyle}
         ${isActive ? 'shadow-lg shadow-indigo-200 dark:shadow-indigo-900 scale-105' : 'shadow-sm'}
+        ${isPendingOnDemand && !isEnabled ? 'opacity-50' : ''}
+        ${isPendingOnDemand && isEnabled ? 'cursor-pointer hover:border-cyan-400 hover:shadow-md hover:shadow-cyan-100 dark:hover:shadow-cyan-900/30' : ''}
       `}
     >
       {isActive && (
@@ -58,10 +80,13 @@ export function ExpertNode({ data }: NodeProps) {
       )}
       <Handle type="target" position={Position.Top} className="!bg-slate-300 dark:!bg-slate-600" />
       <div className="flex items-center gap-1.5 justify-center">
-        {cfg.icon}
-        <span className="text-slate-700 dark:text-slate-200">{name}</span>
+        {icon}
+        <span className={`${isPendingOnDemand && !isEnabled ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'}`}>{name}</span>
       </div>
-      {nodeData.iteration > 1 && (
+      {isPendingOnDemand && isEnabled && (
+        <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-normal">Click to review</span>
+      )}
+      {nodeData.iteration > 1 && !isPendingOnDemand && (
         <span className="text-xs text-slate-400 dark:text-slate-500">v{nodeData.iteration}</span>
       )}
       {nodeData.modelAssignment && (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { updateArtifact } from '../../api/pipeline';
+import { updateArtifact, runAutoFix } from '../../api/pipeline';
 import { CharacterEditModal, type CharacterData } from './CharacterEditModal';
 
 // Tabs that generate one artifact per chapter (stored as base_key_N)
@@ -16,6 +16,7 @@ const TABS = [
   { key: 'prose_chapter', label: 'Prose' },
   { key: 'continuity_report', label: 'Continuity' },
   { key: 'edited_chapter', label: 'Edited' },
+  { key: 'final_review', label: 'Review' },
 ];
 
 export function ArtifactViewer() {
@@ -120,7 +121,19 @@ export function ArtifactViewer() {
 }
 
 function ArtifactContent({ type, content, version, artifactId }: { type: string; content: unknown; version: number; artifactId: string }) {
-  const data = content as Record<string, unknown>;
+  let data: Record<string, unknown>;
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      data = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : { raw: content };
+    } catch {
+      data = { raw: content };
+    }
+  } else if (typeof content === 'object' && content !== null) {
+    data = content as Record<string, unknown>;
+  } else {
+    data = {};
+  }
 
   return (
     <div>
@@ -143,6 +156,7 @@ function ArtifactBody({ type, data, artifactId }: { type: string; data: Record<s
   if (baseType === 'prose_chapter' || baseType === 'edited_chapter') return <ProseView data={data} />;
   if (baseType === 'scene_outline') return <SceneView data={data} />;
   if (baseType === 'continuity_report') return <ContinuityView data={data} />;
+  if (baseType === 'final_review') return <FinalReviewView data={data} />;
   // Default: pretty JSON
   return (
     <pre className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap bg-slate-50 dark:bg-slate-800 rounded-lg p-3 overflow-auto">
@@ -719,6 +733,191 @@ function ContinuityView({ data }: { data: Record<string, unknown> }) {
             ))}
           </div>
         </Section>
+      )}
+    </div>
+  );
+}
+
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+    /^\s*```json/i.test(trimmed);
+}
+
+function FinalReviewView({ data }: { data: Record<string, unknown> }) {
+  const projectId = useStore(s => s.projectId);
+  const reviewStatus = useStore(s => s.reviewStatus);
+  const fixProgress = useStore(s => s.fixProgress);
+  const [fixing, setFixing] = useState(false);
+
+  const verdict = String(data.overall_verdict ?? 'unknown');
+  const totalIssues = Number(data.total_issues ?? 0);
+  const categories = (data.categories ?? {}) as Record<string, { description?: string; findings?: any[] }>;
+  const summary = String(data.summary ?? '');
+
+  // Flatten all findings for auto-fix
+  const allFindings: any[] = [];
+  for (const cat of Object.values(categories)) {
+    if (Array.isArray(cat.findings)) {
+      allFindings.push(...cat.findings);
+    }
+  }
+
+  const verdictStyles: Record<string, { bg: string; text: string; label: string }> = {
+    clean:        { bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300', label: 'Clean' },
+    minor_issues: { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300', label: 'Minor Issues' },
+    major_issues: { bg: 'bg-red-50 dark:bg-red-950/40', text: 'text-red-700 dark:text-red-300', label: 'Major Issues' },
+  };
+  const vs = verdictStyles[verdict] ?? { bg: 'bg-slate-50 dark:bg-slate-800', text: 'text-slate-600 dark:text-slate-400', label: verdict };
+
+  const severityBadge: Record<string, string> = {
+    critical: 'bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300',
+    major: 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300',
+    minor: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  };
+
+  const categoryLabels: Record<string, { label: string; icon: string }> = {
+    internal_prose: { label: 'Internal Prose', icon: 'IP' },
+    world_lore:     { label: 'World / Lore', icon: 'WL' },
+    science:        { label: 'Science', icon: 'SC' },
+    characters:     { label: 'Characters', icon: 'CH' },
+    beats:          { label: 'Beats', icon: 'BT' },
+    scenes:         { label: 'Scenes', icon: 'SN' },
+  };
+
+  const handleAutoFix = async () => {
+    if (!projectId || fixing) return;
+    setFixing(true);
+    try {
+      await runAutoFix(projectId);
+    } catch (err) {
+      console.error('Auto-fix failed:', err);
+    } finally {
+      setFixing(false);
+    }
+  };
+
+  const isFixing = reviewStatus === 'fixing';
+  const fixDone = reviewStatus === 'fix_complete';
+
+  return (
+    <div className="space-y-4">
+      {/* Verdict banner */}
+      <div className={`rounded-lg p-3 border ${vs.bg} border-current/10`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-bold ${vs.text}`}>{vs.label}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {totalIssues} issue{totalIssues !== 1 ? 's' : ''} found
+            </span>
+          </div>
+          {allFindings.length > 0 && (
+            <button
+              onClick={handleAutoFix}
+              disabled={isFixing || fixing}
+              className={`
+                flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border
+                ${isFixing || fixing
+                  ? 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 cursor-wait'
+                  : fixDone
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700'
+                    : 'bg-cyan-50 text-cyan-700 border-cyan-300 hover:bg-cyan-100 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-700 dark:hover:bg-cyan-900'
+                }
+              `}
+            >
+              {isFixing || fixing ? (
+                <>
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  {fixProgress ? `Fixing Ch ${fixProgress.chapter}…` : 'Fixing…'}
+                </>
+              ) : fixDone ? (
+                'Fixes Applied'
+              ) : (
+                'Auto-Fix All'
+              )}
+            </button>
+          )}
+        </div>
+        {summary && !looksLikeJson(summary) && (
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">{summary}</p>
+        )}
+      </div>
+
+      {/* Category breakdown */}
+      {Object.entries(categories).map(([catKey, catData]) => {
+        const findings = catData.findings ?? [];
+        if (findings.length === 0) return null;
+        const catInfo = categoryLabels[catKey] ?? { label: catKey, icon: '?' };
+
+        return (
+          <div key={catKey}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 w-5 h-5 rounded flex items-center justify-center">
+                {catInfo.icon}
+              </span>
+              <h5 className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                {catInfo.label}
+              </h5>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                {findings.length} issue{findings.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {findings.map((f: any, i: number) => (
+                <div key={i} className="border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {f.id && (
+                        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{f.id}</span>
+                      )}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize ${severityBadge[f.severity] ?? severityBadge.minor}`}>
+                        {f.severity}
+                      </span>
+                      {f.chapter && (
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Ch {f.chapter}</span>
+                      )}
+                    </div>
+                  </div>
+                  {f.issue && (
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{f.issue}</p>
+                  )}
+                  {f.location && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">{f.location}</p>
+                  )}
+                  {f.evidence && (
+                    <div className="bg-slate-50 dark:bg-slate-800/60 rounded px-2 py-1.5">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">"{f.evidence}"</p>
+                    </div>
+                  )}
+                  {f.suggested_fix && (
+                    <div className="bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-100 dark:border-cyan-900/50 rounded px-2 py-1.5">
+                      <p className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-0.5">Suggested Fix</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300">{f.suggested_fix}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Clean verdict celebration */}
+      {allFindings.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-8 gap-2">
+          <span className="text-3xl">✓</span>
+          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">No issues found!</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Your manuscript is internally consistent.</p>
+        </div>
+      )}
+
+      {/* Raw fallback */}
+      {data.raw && allFindings.length === 0 && (
+        <RawFallback label="Final Review" raw={String(data.raw)} />
       )}
     </div>
   );

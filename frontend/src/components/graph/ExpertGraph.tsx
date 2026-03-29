@@ -16,6 +16,7 @@ import { PHASE_ORDER, PHASE_DEPENDENCIES, PHASE_DISPLAY_NAMES } from '../../type
 import { ExpertNode } from './ExpertNode';
 import { LoopGroupNode } from './LoopGroupNode';
 import { ModelSelectorPopover } from './ModelSelectorPopover';
+import { runFinalReview } from '../../api/pipeline';
 
 // ── Geometry constants ──────────────────────────────────────────────────────
 // ExpertNode: min-w-[140px] + px-3 padding → rendered width ~150px.
@@ -53,6 +54,7 @@ const NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   prose_writer:          { x: NODE_COL, y: 470 },
   continuity_editor:     { x: NODE_COL, y: 560 },
   literary_editor:       { x: NODE_COL, y: 650 },
+  final_draft_reviewer:  { x: NODE_COL, y: 770 },
 };
 
 // Loop group bounding boxes — both identical width, tightly wrapping their nodes
@@ -66,6 +68,8 @@ export function ExpertGraph() {
   const darkMode       = useStore(s => s.darkMode);
   const modelConfig    = useStore(s => s.modelConfig);
   const projectId      = useStore(s => s.projectId);
+  const projectStatus  = useStore(s => s.projectStatus);
+  const reviewStatus   = useStore(s => s.reviewStatus);
   const chapterProgress = useStore(s => s.chapterProgress);
 
   const [popoverPhase, setPopoverPhase] = useState<string | null>(null);
@@ -105,6 +109,7 @@ export function ExpertGraph() {
         status: phases[key]?.status ?? 'pending',
         iteration: phases[key]?.iteration ?? 1,
         isActive: activePhase === key,
+        isEnabled: key === 'final_draft_reviewer' ? projectStatus === 'complete' : true,
         label: PHASE_DISPLAY_NAMES[key],
         modelAssignment: modelConfig[key] ?? { provider: 'gemini' as const, model: 'gemini-3.1-flash-lite-preview' },
       },
@@ -140,7 +145,7 @@ export function ExpertGraph() {
     ];
 
     return [...groupNodes, ...agentNodes];
-  }, [phases, activePhase, modelConfig, sceneLoopActive, chapterLoopActive, progressLabel]);
+  }, [phases, activePhase, modelConfig, projectStatus, sceneLoopActive, chapterLoopActive, progressLabel]);
 
   const edges: Edge[] = useMemo(() => {
     const result: Edge[] = [];
@@ -148,11 +153,16 @@ export function ExpertGraph() {
     // Regular DAG edges
     for (const [target, deps] of Object.entries(PHASE_DEPENDENCIES)) {
       for (const source of deps) {
+        const isOnDemandEdge = target === 'final_draft_reviewer';
         result.push({
           id: `${source}->${target}`,
           source, target,
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-          style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isOnDemandEdge ? '#06b6d4' : '#94a3b8' },
+          style: {
+            stroke: isOnDemandEdge ? '#06b6d4' : '#94a3b8',
+            strokeWidth: 1.5,
+            ...(isOnDemandEdge ? { strokeDasharray: '4 4', opacity: 0.6 } : {}),
+          },
           animated: phases[source]?.status === 'running',
           zIndex: 2,
         });
@@ -203,6 +213,11 @@ export function ExpertGraph() {
         onInit={instance => { rfRef.current = instance; }}
         onNodeClick={(event, node) => {
           if (node.id.startsWith('__')) return;
+          // Handle click on final_draft_reviewer to trigger review
+          if (node.id === 'final_draft_reviewer' && projectId && projectStatus === 'complete' && reviewStatus !== 'running' && reviewStatus !== 'fixing') {
+            runFinalReview(projectId).catch(console.error);
+            return;
+          }
           setPopoverPhase(node.id);
           setPopoverPos({ x: event.clientX, y: event.clientY });
         }}

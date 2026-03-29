@@ -41,6 +41,7 @@ export const PHASE_ORDER = [
   'prose_writer',
   'continuity_editor',
   'literary_editor',
+  'final_draft_reviewer',
 ] as const;
 
 export type PhaseKey = typeof PHASE_ORDER[number];
@@ -55,6 +56,7 @@ export const PHASE_DISPLAY_NAMES: Record<string, string> = {
   prose_writer: 'Prose Writer',
   continuity_editor: 'Continuity Editor',
   literary_editor: 'Literary Editor',
+  final_draft_reviewer: 'Draft Reviewer',
 };
 
 export const PHASE_DEPENDENCIES: Record<string, string[]> = {
@@ -67,4 +69,5 @@ export const PHASE_DEPENDENCIES: Record<string, string[]> = {
   prose_writer: ['scene_outliner'],
   continuity_editor: ['prose_writer'],
   literary_editor: ['continuity_editor'],
+  final_draft_reviewer: ['literary_editor'],
 };

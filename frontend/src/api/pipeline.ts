@@ -29,3 +29,9 @@ export const getPendingChoice = (projectId: string) =>
 
 export const updateArtifact = (projectId: string, artifactId: string, contentJson: unknown) =>
   api.patch(`/projects/${projectId}/artifacts/${artifactId}`, { content_json: contentJson });
+
+export const runFinalReview = (projectId: string) =>
+  api.post(`/projects/${projectId}/review`);
+
+export const runAutoFix = (projectId: string, findingIds?: string[]) =>
+  api.post(`/projects/${projectId}/auto-fix`, { finding_ids: findingIds ?? null });

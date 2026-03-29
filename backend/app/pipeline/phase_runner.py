@@ -17,6 +17,8 @@ from app.agents.prose_writer import ProseWriter
 from app.agents.scene_outliner import SceneOutliner
 from app.agents.scientific_advisor import ScientificAdvisor
 from app.agents.world_builder import WorldBuilder
+from app.agents.final_draft_reviewer import FinalDraftReviewer
+from app.agents.auto_fixer import AutoFixer
 from app.models.db_models import Artifact, PendingChoice, Phase, PhaseStatus, Project
 from app.services.artifact_service import get_all_active_artifacts, save_artifact
 from app.services.interrupt_service import consume_interrupt, get_pending_interrupt
@@ -37,6 +39,8 @@ AGENT_REGISTRY: dict[str, type[BaseAgent]] = {
     "prose_writer": ProseWriter,
     "continuity_editor": ContinuityEditor,
     "literary_editor": LiteraryEditor,
+    "final_draft_reviewer": FinalDraftReviewer,
+    "auto_fixer": AutoFixer,
 }
 
 

@@ -69,6 +69,12 @@ interface AppStore {
   setChapterProgress: (p: { currentChapter: number; totalChapters: number; activePhase: string | null } | null) => void;
   viewingChapter: number;
   setViewingChapter: (n: number) => void;
+
+  // Final draft review
+  reviewStatus: 'idle' | 'running' | 'complete' | 'fixing' | 'fix_complete';
+  setReviewStatus: (status: 'idle' | 'running' | 'complete' | 'fixing' | 'fix_complete') => void;
+  fixProgress: { chapter: number; totalChapters: number } | null;
+  setFixProgress: (p: { chapter: number; totalChapters: number } | null) => void;
 }
 
 const defaultPhaseState = (phase_key: string): PhaseState => ({
@@ -100,6 +106,8 @@ export const useStore = create<AppStore>((set) => ({
     modelConfig: {},
     chapterProgress: null,
     viewingChapter: 1,
+    reviewStatus: 'idle',
+    fixProgress: null,
   }),
   clearProject: () => set({
     projectId: null,
@@ -116,6 +124,8 @@ export const useStore = create<AppStore>((set) => ({
     modelConfig: {},
     chapterProgress: null,
     viewingChapter: 1,
+    reviewStatus: 'idle',
+    fixProgress: null,
   }),
   setProjectStatus: (status) => set({ projectStatus: status }),
   setAutoPilot: (val) => set({ autoPilot: val }),
@@ -224,4 +234,9 @@ export const useStore = create<AppStore>((set) => ({
   setChapterProgress: (p) => set({ chapterProgress: p }),
   viewingChapter: 1,
   setViewingChapter: (n) => set({ viewingChapter: n }),
+
+  reviewStatus: 'idle',
+  setReviewStatus: (status) => set({ reviewStatus: status }),
+  fixProgress: null,
+  setFixProgress: (p) => set({ fixProgress: p }),
 }));

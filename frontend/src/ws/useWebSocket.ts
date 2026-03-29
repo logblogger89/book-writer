@@ -90,6 +90,14 @@ function handleEvent(msg: WsEvent) {
           })
           .catch(() => {});
       }
+      // Restore review status from phase state
+      const reviewPhase = Array.isArray(m.phases) && m.phases.find((p: any) => p.phase_key === 'final_draft_reviewer');
+      if (reviewPhase) {
+        if (reviewPhase.status === 'complete') s.setReviewStatus('complete');
+        else if (reviewPhase.status === 'running') s.setReviewStatus('running');
+        else s.setReviewStatus('idle');
+      }
+
       // Restore artifact content for any phases that have stored artifacts
       const hasArtifacts = m.phases.some((p: any) => p.artifact_id !== null);
       if (hasArtifacts) {
@@ -200,6 +208,41 @@ function handleEvent(msg: WsEvent) {
       const m = msg as any;
       s.setChapterProgress({ currentChapter: m.chapter_number, totalChapters: m.total_chapters, activePhase: null });
       s.setViewingChapter(m.chapter_number);
+      break;
+    }
+
+    // Final draft review events
+    case 'review_started':
+      s.setReviewStatus('running');
+      s.setPhaseStatus('final_draft_reviewer', 'running');
+      s.setActivePhase('final_draft_reviewer');
+      break;
+    case 'review_complete':
+      s.setReviewStatus('complete');
+      s.setPhaseStatus('final_draft_reviewer', 'complete');
+      s.setActivePhase(null);
+      s.setActiveArtifactTab('final_review');
+      break;
+    case 'auto_fix_started': {
+      const m = msg as any;
+      s.setReviewStatus('fixing');
+      s.setFixProgress({ chapter: 0, totalChapters: m.total_chapters ?? 0 });
+      s.setPhaseStatus('final_draft_reviewer', 'running');
+      s.setActivePhase('final_draft_reviewer');
+      break;
+    }
+    case 'auto_fix_progress': {
+      const m = msg as any;
+      s.setFixProgress({ chapter: m.chapter, totalChapters: s.fixProgress?.totalChapters ?? 0 });
+      break;
+    }
+    case 'auto_fix_complete': {
+      s.setReviewStatus('fix_complete');
+      s.setFixProgress(null);
+      s.setPhaseStatus('final_draft_reviewer', 'complete');
+      s.setActivePhase(null);
+      // Show the edited chapter so user can see fixes applied
+      s.setActiveArtifactTab('edited_chapter');
       break;
     }
   }

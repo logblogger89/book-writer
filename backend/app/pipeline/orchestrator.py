@@ -16,7 +16,7 @@ from app.models.db_models import (
     ProjectStatus,
 )
 from app.models.db_models import ChoiceStatus
-from app.pipeline.phase_graph import ITERATIVE_PHASES, PHASE_ORDER, get_ready_phases
+from app.pipeline.phase_graph import ITERATIVE_PHASES, ON_DEMAND_PHASES, PHASE_ORDER, get_ready_phases
 from app.pipeline.phase_runner import run_phase
 from app.ws import event_types as ev
 from app.ws.connection_manager import manager as ws_manager
@@ -136,6 +136,10 @@ async def _run_phases(
 
         if stop_event.is_set():
             return
+
+        # Skip on-demand phases (e.g. final_draft_reviewer) — they run via dedicated API
+        if phase_key in ON_DEMAND_PHASES:
+            continue
 
         # scene_outliner runs per-chapter (one LLM call per chapter, saves scene_outline_N)
         if phase_key == "scene_outliner":
